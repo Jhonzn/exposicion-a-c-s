@@ -1,0 +1,33 @@
+```dockerignore
+# Dependencias de Node.js
+node_modules/
+
+# Variables de entorno
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# Editores / IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Documentación
+README.md
+*.md
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+```
