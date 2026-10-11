@@ -5,8 +5,6 @@ Enfoque: integración y ejecución de componentes aislados.
 
 > **Idea central:** cada componente del sistema (API y base de datos) corre en su propio contenedor, aislado de los demás. Docker Compose los conecta con una red, les entrega la configuración y guarda los datos en un volumen. Lo que se prueba son esas **conexiones**: comunicación, configuración, persistencia y recuperación cuando un componente cae.
 
-> ⏳ **Pendiente de la entrega 1 (R1):** este documento describe el `docker-compose.yml` del commit `244193f`. Cuando entren los ajustes de R1 (healthcheck, `depends_on` con `service_healthy`, `name:` y `/health` con consulta a la base de datos), se actualizan las partes marcadas con ⏳.
-
 ---
 
 ## 1. Qué exige el tema
