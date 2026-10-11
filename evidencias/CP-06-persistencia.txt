@@ -1,0 +1,31 @@
+﻿**********************
+Inicio de la transcripción de Windows PowerShell
+Hora de inicio: 20261010220607
+Nombre de usuario: JHON_GAMER\jhonf
+Usuario RunAs: JHON_GAMER\jhonf
+Nombre de la configuración: 
+Máquina: JHON_GAMER (Microsoft Windows NT 10.0.26200.0)
+Aplicación host: C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\scripts\cp06-persistencia.ps1
+Id. de proceso: 11512
+PSVersion: 5.1.26100.9549
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9549
+BuildVersion: 10.0.26100.9549
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+La transcripción ha comenzado. El archivo de salida es C:\Users\jhonf\OneDrive\Desktop\semestre 8\aseguramiento de la calidad del software\exp-arq-est-pr-int-sist\labor-arqu-contenedores\evidencias\CP-06-persistencia.txt
+CP-06: creando producto antes de recrear contenedores.
+Producto creado: ID=20, nombre=CP-06-Persistencia-8e1cd2f14d514fb287bfc60d65bd340d
+Deteniendo y recreando contenedores SIN eliminar el volumen.
+
+
+PS>ErrorTerminación(Invoke-WebRequest): "Se ha terminado la conexión: La conexión ha terminado de forma inesperada."
+RESULTADO: APROBADO
+El producto ID=20 sobreviviÃ³ a la recreaciÃ³n de los contenedores.
+**********************
+Fin de la transcripción de Windows PowerShell
+Hora de finalización: 20261010220619
+**********************

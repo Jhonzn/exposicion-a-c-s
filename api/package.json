@@ -4,7 +4,9 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "test:funcional": "jest --runInBand test/funcional.test.js",
+    "test:falla": "jest --runInBand test/falla.test.js"
   },
   "keywords": [],
   "author": "",

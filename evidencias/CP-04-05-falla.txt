@@ -1,0 +1,29 @@
+﻿
+> api-contenedores@1.0.0 test:falla
+> jest --runInBand test/falla.test.js
+
+node.exe :  Container laboratorio-mysql  Stopping
+En C:\Program Files\nodejs\npm.ps1: 29 Carácter: 3
++   & $NODE_EXE $NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( Container laboratorio-mysql  Stopping:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ Container laboratorio-mysql  Stopped
+ Container laboratorio-mysql  Starting
+ Container laboratorio-mysql  Started
+ Container laboratorio-mysql  Stopping
+ Container laboratorio-mysql  Stopped
+ Container laboratorio-mysql  Starting
+ Container laboratorio-mysql  Started
+ Container laboratorio-mysql  Running
+PASS test/falla.test.js (29.62 s)
+  Pruebas de fallos y recuperaci├│n
+    ÔêÜ CP-04: detectar la ca├¡da de MySQL y responder 503 (14174 ms)
+    ÔêÜ CP-05: recuperar conexi├│n y conservar un producto sin reiniciar la API (14833 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        29.939 s
+Ran all test suites matching test/falla.test.js.

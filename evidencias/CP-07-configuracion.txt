@@ -1,0 +1,43 @@
+﻿**********************
+Inicio de la transcripción de Windows PowerShell
+Hora de inicio: 20261010220629
+Nombre de usuario: JHON_GAMER\jhonf
+Usuario RunAs: JHON_GAMER\jhonf
+Nombre de la configuración: 
+Máquina: JHON_GAMER (Microsoft Windows NT 10.0.26200.0)
+Aplicación host: C:\windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\scripts\cp07-configuracion.ps1
+Id. de proceso: 22028
+PSVersion: 5.1.26100.9549
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9549
+BuildVersion: 10.0.26100.9549
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+La transcripción ha comenzado. El archivo de salida es C:\Users\jhonf\OneDrive\Desktop\semestre 8\aseguramiento de la calidad del software\exp-arq-est-pr-int-sist\labor-arqu-contenedores\evidencias\CP-07-configuracion.txt
+Configurando temporalmente una contraseÃ±a incorrecta.
+
+PS>ErrorTerminación(Invoke-WebRequest): "Se ha terminado la conexión: La conexión ha terminado de forma inesperada."
+PS>ErrorTerminación(Invoke-WebRequest): "{"estado":"ERROR","baseDatos":"no disponible"}"
+PS>ErrorTerminación(Invoke-WebRequest): "{"error":"Base de datos no disponible"}"
+Correcto: la configuraciÃ³n incorrecta produce HTTP 503.
+Registros de la API con contraseÃ±a incorrecta:
+laboratorio-api  | 
+laboratorio-api  | > api-contenedores@1.0.0 start
+laboratorio-api  | > node src/app.js
+laboratorio-api  | 
+laboratorio-api  | API ejecut├índose en el puerto 3000
+laboratorio-api  | Healthcheck: MySQL no disponible: Access denied for user 'laboratorio_user'@'172.18.0.3' (using password: YES)
+laboratorio-api  | Error consultando productos: Access denied for user 'laboratorio_user'@'172.18.0.3' (using password: YES)
+Quitando la variable temporal para utilizar la configuraciÃ³n de .env.
+
+PS>ErrorTerminación(Invoke-WebRequest): "Se ha terminado la conexión: La conexión ha terminado de forma inesperada."
+RESULTADO: APROBADO
+La API fallÃ³ con la contraseÃ±a incorrecta y se recuperÃ³ al restaurar la configuraciÃ³n.
+
+**********************
+Fin de la transcripción de Windows PowerShell
+Hora de finalización: 20261010220639
+**********************

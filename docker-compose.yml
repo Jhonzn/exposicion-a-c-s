@@ -1,48 +1,53 @@
+name: laboratorio-contenedores
+
 services:
-
-  api:
-    build: ./api
-    container_name: laboratorio-api
-
-    ports:
-      - "${API_PORT}:3000"
-
-    environment:
-      PORT: 3000
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-
-    depends_on:
-      - mysql
-
-    networks:
-      - laboratorio-network
-
   mysql:
     image: mysql:8.4
     container_name: laboratorio-mysql
-
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-
     ports:
       - "3313:3306"
-
     volumes:
       - mysql-data:/var/lib/mysql
       - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - laboratorio-network
 
+  api:
+    build: ./api
+    container_name: laboratorio-api
+    ports:
+      - "${API_PORT}:3000"
+    environment:
+      PORT: 3000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - laboratorio-network
 
 volumes:
   mysql-data:
+    name: laboratorio-mysql-data
 
 networks:
   laboratorio-network:
