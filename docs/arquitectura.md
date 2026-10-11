@@ -3,21 +3,22 @@
 **Tema 9 — Pruebas de una arquitectura basada en contenedores**
 Enfoque: integración y ejecución de componentes aislados.
 
-> **Idea central:** cada componente del sistema (API y base de datos) corre en su propio contenedor, aislado de los demás. Docker Compose los conecta mediante una red, les entrega la configuración y guarda los datos en un volumen. Lo que se prueba es que esas **conexiones** funcionen: comunicación, configuración, persistencia y recuperación cuando un componente cae.
+> **Idea central:** cada componente del sistema (API y base de datos) corre en su propio contenedor, aislado de los demás. Docker Compose los conecta con una red, les entrega la configuración y guarda los datos en un volumen. Lo que se prueba son esas **conexiones**: comunicación, configuración, persistencia y recuperación cuando un componente cae.
+
+> ⏳ **Pendiente de la entrega 1 (R1):** este documento describe el `docker-compose.yml` del commit `244193f`. Cuando entren los ajustes de R1 (healthcheck, `depends_on` con `service_healthy`, `name:` y `/health` con consulta a la base de datos), se actualizan las partes marcadas con ⏳.
 
 ---
 
-## 1. ¿Qué es una arquitectura basada en contenedores?
+## 1. Qué exige el tema
 
-Es una forma de organizar un sistema en la que cada componente se empaqueta junto con todo lo que necesita para ejecutarse (código, librerías, sistema base) en una **imagen**. Desde esa imagen se crean **contenedores**: procesos aislados que se ejecutan igual en cualquier computador que tenga Docker.
+La guía pide levantar una API, una base de datos y sus dependencias en contenedores, y demostrar cuatro cosas:
 
-En este laboratorio:
-
-- La **API** (Node.js + Express) es un contenedor.
-- La **base de datos** (MySQL) es otro contenedor.
-- **Docker Compose** los levanta juntos con un solo comando y define cómo se conectan.
-
-**¿Por qué es importante probarla?** Cada componente puede funcionar perfecto por separado y aun así el sistema puede fallar por la forma en que se integran: un nombre de red mal escrito, una variable de entorno faltante, un volumen que no se montó o un contenedor que arrancó antes de que el otro estuviera listo.
+| Exigencia | Qué significa en este laboratorio | Punto de integración |
+|---|---|---|
+| **Comunicación** | La API recibe peticiones y habla con MySQL | PI-1, PI-2 |
+| **Configuración** | Los contenedores toman usuario, contraseña y puertos del `.env` | PI-3 |
+| **Persistencia** | Los datos sobreviven aunque se destruya el contenedor de MySQL | PI-4 |
+| **Recuperación** | Si MySQL cae, la API responde con un error controlado y se recupera sola cuando MySQL vuelve | PI-2 |
 
 ---
 
@@ -25,91 +26,80 @@ En este laboratorio:
 
 ```mermaid
 flowchart LR
-    U["Cliente<br/>(navegador / curl / Jest)"]
-    W["Administrador<br/>(MySQL Workbench)"]
+    C["Cliente<br/>(navegador, curl, Jest)"]
 
-    subgraph HOST["Computador anfitrión (Windows)"]
-        ENV[".env<br/>configuración"]
-        SQL["mysql/init.sql<br/>script inicial"]
+    subgraph HOST["Equipo anfitrión (Windows + Docker Desktop)"]
+        ENV[".env<br/>variables de configuración"]
 
         subgraph COMPOSE["Docker Compose"]
-            subgraph NET["Red: laboratorio-network (bridge)"]
-                API["Contenedor<br/><b>laboratorio-api</b><br/>Node 22 + Express<br/>puerto interno 3000"]
-                DB["Contenedor<br/><b>laboratorio-mysql</b><br/>MySQL 8.4<br/>puerto interno 3306"]
+            subgraph NET["Red laboratorio-network (bridge)"]
+                API["Contenedor <b>laboratorio-api</b><br/>Node.js 22 + Express<br/>puerto interno 3000"]
+                DB["Contenedor <b>laboratorio-mysql</b><br/>MySQL 8.4<br/>puerto interno 3306"]
             end
-            VOL[("Volumen<br/>mysql-data")]
         end
+
+        VOL[("Volumen nombrado<br/><b>mysql-data</b>")]
     end
 
-    U -- "PI-1 · HTTP<br/>localhost:3000" --> API
-    API -- "PI-2 · SQL<br/>mysql:3306" --> DB
-    ENV -. "PI-3 · variables<br/>de entorno" .-> API
-    ENV -. "PI-3" .-> DB
-    DB -- "PI-4 · /var/lib/mysql" --> VOL
-    SQL -. "PI-5 · solo en el<br/>primer arranque" .-> DB
-    W -- "PI-6 · localhost:3313" --> DB
+    C ==>|"PI-1 · HTTP / JSON<br/>localhost:3000"| API
+    API ==>|"PI-2 · SQL<br/>mysql:3306"| DB
+    ENV -.->|"PI-3 · variables de entorno"| COMPOSE
+    DB ==>|"PI-4 · /var/lib/mysql"| VOL
+
+    linkStyle 0 stroke:#2563eb,stroke-width:3px
+    linkStyle 1 stroke:#dc2626,stroke-width:3px
+    linkStyle 2 stroke:#16a34a,stroke-width:3px
+    linkStyle 3 stroke:#9333ea,stroke-width:3px
 ```
 
 **Cómo leerlo:**
 
-- Las **flechas sólidas** son comunicación en tiempo de ejecución: peticiones HTTP, consultas SQL y escritura en disco.
-- Las **flechas punteadas** son configuración que se entrega al arrancar.
-- Los códigos **PI-1 … PI-6** son los puntos de integración que se explican en la sección 4.
-
-### Vista simplificada de puertos
-
-```text
-   Windows (host)                       Dentro de Docker
- ┌──────────────────┐            ┌──────────────────────────┐
- │ localhost:3000 ──┼──────────► │ laboratorio-api   :3000  │
- │                  │            │        │                 │
- │                  │            │        │ mysql:3306      │
- │                  │            │        ▼                 │
- │ localhost:3313 ──┼──────────► │ laboratorio-mysql :3306  │
- └──────────────────┘            └──────────────────────────┘
-```
-
-> La API **no** usa `localhost:3313` para hablar con MySQL. Dentro de Docker, `localhost` es el propio contenedor de la API. Por eso usa el nombre del servicio, `mysql`, y el puerto interno `3306`.
+- **PI-1 (azul):** el cliente entra desde fuera de Docker por el puerto publicado `3000`.
+- **PI-2 (rojo):** la API llega a MySQL por la red interna, usando el **nombre del servicio** `mysql`, no `localhost`.
+- **PI-3 (verde):** el `.env` llega al **borde de Compose**, porque Compose lo lee y reparte las variables a **los dos** contenedores.
+- **PI-4 (morado):** el volumen está **fuera** de Compose, porque sobrevive aunque los contenedores se destruyan.
 
 ---
 
 ## 3. Componentes
 
-| Componente | Tipo | Imagen / origen | Puerto (host → contenedor) | Responsabilidad | ¿Guarda estado? |
-|---|---|---|---|---|---|
-| `laboratorio-api` | Contenedor | Construida desde `api/Dockerfile` (base `node:22-alpine`) | `3000 → 3000` | Recibe peticiones HTTP, valida datos y consulta MySQL | No (efímero) |
-| `laboratorio-mysql` | Contenedor | `mysql:8.4` (oficial) | `3313 → 3306` | Almacena la tabla `productos` | No por sí mismo: usa el volumen |
-| `mysql-data` | Volumen Docker | Creado por Compose | — | Conserva los archivos de la base de datos aunque se borre el contenedor | **Sí** |
-| `laboratorio-network` | Red bridge | Creada por Compose | — | Conecta los contenedores y resuelve nombres (`mysql`, `api`) | No |
-| `.env` | Archivo de configuración | Copia de `.env.example` | — | Define puertos, usuario, contraseñas y nombre de la base | — |
-| `mysql/init.sql` | Script SQL | Repositorio | — | Crea la tabla `productos` e inserta 3 registros de ejemplo | — |
+| Componente | Imagen / origen | Puerto (anfitrión → contenedor) | Responsabilidad | ¿Guarda datos? |
+|---|---|---|---|---|
+| `laboratorio-api` | Construida desde `api/Dockerfile` (base `node:22-alpine`) | `3000 → 3000` | Recibe peticiones HTTP, valida los datos y consulta MySQL | No (efímero) |
+| `laboratorio-mysql` | `mysql:8.4` (imagen oficial) | `3313 → 3306` | Guarda la tabla `productos` | No por sí mismo: usa el volumen |
+| `laboratorio-network` | Red bridge creada por Compose | — | Conecta los contenedores y resuelve sus nombres | No |
+| `mysql-data` | Volumen nombrado creado por Compose | — | Conserva los archivos de la base de datos | **Sí** |
+| `.env` | Copia de `.env.example` (no se sube al repo) | — | Define puertos, usuario, contraseñas y nombre de la base | — |
+| `mysql/init.sql` | Script del repositorio | — | Crea la tabla e inserta 3 productos de ejemplo, **solo** cuando el volumen está vacío | — |
 
-### Endpoints que expone la API
+### Endpoints de la API
 
-| Método | Ruta | Respuesta esperada |
-|---|---|---|
-| GET | `/` | `200` — mensaje de bienvenida |
-| GET | `/health` | `200` — `{ "estado": "OK" }` |
-| GET | `/productos` | `200` — lista de productos · `503` si la BD no responde |
-| GET | `/productos/:id` | `200` — producto · `404` si no existe · `503` si la BD no responde |
-| POST | `/productos` | `201` — producto creado · `400` si los datos son inválidos · `503` si la BD no responde |
+| Método y ruta | Respuesta esperada |
+|---|---|
+| `GET /` | `200` con mensaje de bienvenida |
+| `GET /health` | `200` con `{ "estado": "OK" }` ⏳ *(con el ajuste A6: `503` si MySQL no responde)* |
+| `GET /productos` | `200` con la lista · `503` si MySQL no responde |
+| `GET /productos/:id` | `200` con el producto · `404` si no existe · `503` si MySQL no responde |
+| `POST /productos` | `201` con el producto creado · `400` si los datos son inválidos · `503` si MySQL no responde |
 
 ---
 
 ## 4. Puntos de integración
 
-Un **punto de integración** es un lugar donde dos partes del sistema se conectan. Es justamente donde más fallas aparecen y donde se enfocan las pruebas de integración.
+Un **punto de integración** es un lugar donde dos partes del sistema se conectan. Ahí es donde más fallas aparecen, y por eso es donde se enfocan las pruebas.
 
-| ID | Integración | ¿Cómo se conectan? | ¿Qué debe funcionar? | Archivo donde se define |
+| ID | Integración | Qué viaja | Por dónde | Qué lo define en `docker-compose.yml` |
 |---|---|---|---|---|
-| **PI-1** | Cliente → API | HTTP por el puerto publicado `3000:3000` | La API responde desde fuera de Docker | `docker-compose.yml` (`ports`) |
-| **PI-2** | API → MySQL | Red interna, nombre de servicio `mysql`, puerto `3306`, pool de conexiones `mysql2` | La API lee y escribe en la base de datos | `docker-compose.yml`, `api/src/db.js` |
-| **PI-3** | `.env` → contenedores | Compose lee `.env` y lo pasa como variables de entorno | Ambos contenedores usan las mismas credenciales | `.env`, `docker-compose.yml` (`environment`) |
-| **PI-4** | MySQL → volumen | El volumen `mysql-data` se monta en `/var/lib/mysql` | Los datos sobreviven a `docker compose down` | `docker-compose.yml` (`volumes`) |
-| **PI-5** | `init.sql` → MySQL | Se monta en `/docker-entrypoint-initdb.d/` | La tabla y los datos iniciales existen al primer arranque | `docker-compose.yml`, `mysql/init.sql` |
-| **PI-6** | Host → MySQL | Puerto publicado `3313:3306` | Se puede administrar la BD desde Windows | `docker-compose.yml` (`ports`) |
+| **PI-1** | Anfitrión → API | Peticiones HTTP (`GET`, `POST`) y respuestas en JSON con su código de estado | Puerto publicado: `localhost:3000` del anfitrión hacia el `3000` del contenedor | `ports` del servicio `api`: `"${API_PORT}:3000"` (líneas 7-8) |
+| **PI-2** | API → MySQL | Consultas SQL (`SELECT`, `INSERT`) y sus resultados, por el protocolo de MySQL | Red interna `laboratorio-network`; la API resuelve el nombre de servicio `mysql` y se conecta al puerto `3306` | `networks` de ambos servicios (líneas 21-22 y 41-42), red declarada (47-49), `DB_HOST` y `DB_PORT` (12-13), `depends_on` (18-19) |
+| **PI-3** | `.env` → contenedores | Variables de configuración: host, puerto, nombre de la base, usuario y contraseña | Compose lee el `.env` del anfitrión, sustituye los `${...}` y los entrega como variables de entorno a cada contenedor | `environment` del servicio `api` (líneas 10-16) y del servicio `mysql` (28-32) |
+| **PI-4** | MySQL → volumen | Los archivos de datos de MySQL (tablas y registros) | El volumen `mysql-data` montado en `/var/lib/mysql` dentro del contenedor | `volumes` del servicio `mysql` (líneas 37-38) y volumen declarado (44-45) |
 
-### Flujo completo de una petición (prueba de sistema)
+> ⏳ Los números de línea corresponden al compose actual y cambian cuando R1 agregue `name:` y el healthcheck.
+
+### Flujo completo de una petición
+
+Así se ven los cuatro puntos trabajando juntos cuando se crea un producto y luego se consulta después de recrear los contenedores:
 
 ```mermaid
 sequenceDiagram
@@ -118,73 +108,70 @@ sequenceDiagram
     participant M as laboratorio-mysql
     participant V as Volumen mysql-data
 
-    C->>A: POST /productos {nombre, precio}  (PI-1)
+    Note over A,M: Al arrancar, Compose entrega las variables del .env (PI-3)
+    C->>A: POST /productos con nombre y precio (PI-1)
     A->>A: Valida los datos (400 si son inválidos)
-    A->>M: INSERT INTO productos ...  (PI-2)
-    M->>V: Escribe en /var/lib/mysql  (PI-4)
-    M-->>A: insertId
-    A-->>C: 201 Created {id, nombre, precio}
-    Note over C,V: Reiniciar contenedores (down / up)
-    C->>A: GET /productos/{id}
-    A->>M: SELECT ... WHERE id = ?
-    M-->>A: fila encontrada
-    A-->>C: 200 OK — el dato persiste
+    A->>M: INSERT INTO productos (PI-2)
+    M->>V: Escribe en /var/lib/mysql (PI-4)
+    M-->>A: id del nuevo producto
+    A-->>C: 201 Created
+    Note over C,V: docker compose down y up -d: los contenedores se destruyen y se recrean
+    C->>A: GET /productos/id (PI-1)
+    A->>M: SELECT ... WHERE id = ? (PI-2)
+    M->>V: Lee del volumen (PI-4)
+    M-->>A: el producto sigue ahí
+    A-->>C: 200 OK
 ```
 
 ---
 
-## 5. Riesgos identificados
+## 5. Riesgos por punto de integración
 
-Cada riesgo está ligado a un punto de integración y sugiere qué se debería probar. Los marcados con 🔎 **ya se observaron** al ejecutar el laboratorio.
+Un riesgo por cada punto de integración, con los casos de prueba que lo cubren. Los casos están detallados en [`matriz-casos.md`](matriz-casos.md) (R3).
 
-| ID | Riesgo | PI | ¿Qué pasa? | Impacto | Cómo se prueba / mitiga |
-|---|---|---|---|---|---|
-| **R-01** 🔎 | La API arranca antes de que MySQL esté listo | PI-2 | `depends_on` solo espera a que el contenedor **inicie**, no a que MySQL **acepte conexiones**. Los logs muestran `ECONNREFUSED` y la API responde `503` durante los primeros segundos | Medio | Prueba: consultar `/productos` justo después de `up`. Mitigación: `healthcheck` en MySQL + `depends_on: condition: service_healthy` |
-| **R-02** 🔎 | MySQL se cae mientras la API está activa | PI-2 | La API responde `503 "Base de datos no disponible"` sin caerse; al volver MySQL se recupera sola (el pool crea conexiones nuevas) | Alto | Prueba: `docker stop laboratorio-mysql` → esperar `503`; `docker start` → esperar `200` |
-| **R-03** 🔎 | `/health` dice "OK" aunque la BD esté caída | PI-2 | El endpoint no consulta MySQL, así que reporta un estado falso | Medio | Prueba: detener MySQL y llamar `/health`. Mitigación: que `/health` haga `SELECT 1` |
-| **R-04** 🔎 | Un contenedor cae y no vuelve a levantarse | PI-1, PI-2 | Ningún servicio tiene política de reinicio (`RestartPolicy = no`) | Alto | Prueba: matar el proceso y verificar el estado. Mitigación: `restart: unless-stopped` |
-| **R-05** | Configuración incorrecta | PI-3 | Si falta `.env`, si las contraseñas de API y MySQL no coinciden o si se usa `DB_HOST=localhost`, la API no conecta | Alto | Prueba: levantar con credenciales erróneas y esperar `503` |
-| **R-06** | Pérdida de datos | PI-4 | `docker compose down -v` borra el volumen; sin volumen, los datos mueren con el contenedor | Alto | Prueba: insertar → `down` → `up` → el dato sigue (y documentar que `-v` lo borra) |
-| **R-07** | `init.sql` no se vuelve a ejecutar | PI-5 | MySQL solo lo ejecuta si el volumen está vacío; un cambio en el script no se aplica a una BD existente | Bajo | Prueba: modificar el script y verificar; solución: `down -v` en ambiente de pruebas |
-| **R-08** | Puerto ocupado en el host | PI-1, PI-6 | Si 3000 o 3313 están en uso, el contenedor no arranca | Bajo | Mitigación: cambiar el puerto externo en `.env` / compose |
-| **R-09** 🔎 | Tipos de dato inconsistentes | PI-2 | `GET` devuelve `precio` como texto (`"85000.00"`, por ser `DECIMAL`) y `POST` lo devuelve como número (`120000`) | Bajo | Prueba: comparar el tipo de `precio` en ambas respuestas |
-| **R-10** | Exposición de credenciales | PI-3, PI-6 | Las contraseñas están en texto plano en `.env` y el usuario `root` es accesible por el puerto 3313 | Medio (bajo en laboratorio local) | Mitigación: no versionar `.env` (ya está en `.gitignore`), no publicar 3313 fuera de pruebas |
+| ID | Punto | Riesgo | Qué pasaría si ocurre | Casos que lo cubren |
+|---|---|---|---|---|
+| **RG-1** | PI-1 | La API no es alcanzable desde el anfitrión, o responde con un contrato distinto al esperado (otro código HTTP u otro formato de JSON) | El cliente no puede usar el sistema o interpreta mal las respuestas | CP-01, CP-02, CP-03 |
+| **RG-2** | PI-2 | MySQL se cae o todavía no está listo, y la API se cuelga o diagnostica mal el error | La API deja de responder o da un error que no explica la causa real | CP-01, CP-02, CP-03, CP-04, CP-05 |
+| **RG-3** | PI-3 | Una variable de entorno errónea (por ejemplo, la contraseña) deja a la API sin acceso a la base de datos | El sistema arranca "bien" pero ninguna consulta funciona | CP-07 |
+| **RG-4** | PI-4 | Los datos se pierden al recrear el contenedor de MySQL | Se borra toda la información guardada | CP-06 |
 
-### Mapa riesgo → punto de integración
+> **PI-2 (API → MySQL) es el punto más crítico:** lo cubren 5 de los 7 casos, porque es donde la API depende de otro contenedor que puede no estar disponible.
 
-```mermaid
-flowchart LR
-    PI1[PI-1 Cliente→API] --- R04 & R08
-    PI2[PI-2 API→MySQL] --- R01 & R02 & R03 & R04 & R09
-    PI3[PI-3 .env→contenedores] --- R05 & R10
-    PI4[PI-4 MySQL→volumen] --- R06
-    PI5[PI-5 init.sql→MySQL] --- R07
-    PI6[PI-6 Host→MySQL] --- R08 & R10
-```
+### Evidencia de los riesgos en el laboratorio actual
 
-> **PI-2 (API → MySQL)** es el punto más crítico: concentra la mayoría de los riesgos. Por eso la mayor parte de los casos de prueba deberían enfocarse ahí.
+Al ejecutar el laboratorio, **antes** de los ajustes de R1, se observó lo siguiente. Muestra que los riesgos no son teóricos:
 
----
-
-## 6. Conceptos de contenedores aplicados al laboratorio
-
-| Concepto | Qué es (en una línea) | Dónde se ve en este laboratorio |
+| Observación | Riesgo | Estado |
 |---|---|---|
-| **Imagen** | Plantilla de solo lectura con todo lo necesario para ejecutar un programa | `node:22-alpine`, `mysql:8.4` y la imagen construida de la API |
-| **Contenedor** | Instancia en ejecución de una imagen, aislada del resto | `laboratorio-api` y `laboratorio-mysql` |
-| **Dockerfile** | Receta paso a paso para construir una imagen | `api/Dockerfile`: copia `package.json`, ejecuta `npm ci`, copia `src/` y arranca con `npm start` |
-| **Capas y caché** | Cada instrucción del Dockerfile crea una capa reutilizable | Se copia `package*.json` **antes** que el código para no reinstalar dependencias en cada cambio |
-| **Docker Compose** | Archivo YAML que describe varios contenedores y cómo se relacionan | `docker-compose.yml`; se activa con `docker compose up -d --build` |
-| **Red bridge y DNS interno** | Red privada en la que los contenedores se encuentran por nombre | La API llega a MySQL usando el nombre `mysql`, no una IP |
-| **Publicación de puertos** | Conecta un puerto del host con uno del contenedor (`host:contenedor`) | `3000:3000` (API) y `3313:3306` (MySQL) |
-| **Volumen** | Almacenamiento que vive fuera del contenedor | `mysql-data` conserva la base de datos aunque se borre el contenedor |
-| **Bind mount** | Montar un archivo o carpeta del host dentro del contenedor | `./mysql/init.sql` montado en `/docker-entrypoint-initdb.d/` en modo solo lectura (`:ro`) |
-| **Variables de entorno** | Configuración que se entrega al contenedor desde fuera, sin tocar el código | `.env` → `DB_HOST`, `DB_USER`, `MYSQL_PASSWORD`, etc. |
-| **Efímero vs. persistente** | El contenedor se puede destruir y recrear; los datos importantes van en volúmenes | `down` borra contenedores pero no el volumen; `down -v` borra ambos |
-| **`depends_on`** | Define el **orden** de arranque | La API arranca después de MySQL… pero no espera a que esté **listo** (riesgo R-01) |
-| **Healthcheck** | Comando que Docker ejecuta para saber si un servicio está sano | **No está configurado** todavía (riesgos R-01 y R-03) |
-| **Política de reinicio** | Qué hace Docker si un contenedor se detiene (`no`, `always`, `unless-stopped`, `on-failure`) | Actualmente `no` (riesgo R-04) |
-| **`.dockerignore`** | Archivos que no se envían al construir la imagen | Excluye `node_modules`, `.env` y `.git` |
+| Justo después de `docker compose up`, la API registra `ECONNREFUSED ...:3306` y responde `503` durante unos segundos: `depends_on` espera a que el contenedor de MySQL **arranque**, no a que **acepte conexiones** | RG-2 | ⏳ Lo corrige el ajuste A2 (healthcheck + `service_healthy`) |
+| Con `docker stop laboratorio-mysql`, `/productos` responde `503 "Base de datos no disponible"` y la API **sigue en ejecución** | RG-2 | Comportamiento correcto; lo validan CP-04 y CP-05 |
+| Con MySQL detenido, `/health` sigue respondiendo `200 "OK"`, así que reporta un estado falso | RG-2 | ⏳ Lo corrige el ajuste A6 |
+| Al volver a iniciar MySQL, la API se recupera **sola**, sin reiniciarla | RG-2 | Comportamiento correcto; lo valida CP-05 |
+| Tras `docker compose down` y `up -d`, un producto creado antes sigue consultable | RG-4 | Comportamiento correcto; lo valida CP-06 |
+
+### Otros riesgos fuera del alcance de la estrategia
+
+Se identificaron, pero no tienen caso de prueba porque la estrategia los excluye o porque son de bajo impacto en un laboratorio local:
+
+- **`init.sql` no se vuelve a ejecutar** si el volumen ya tiene datos, así que un cambio en el script no se aplica a una base existente.
+- **Puertos ocupados** en el anfitrión (`3000` o `3313`): el contenedor no arranca.
+- **`docker compose down -v`** borra el volumen y con él todos los datos: es una acción deliberada, no una falla.
+- **Seguridad:** las contraseñas están en texto plano en `.env` y `root` es accesible por el puerto `3313`. La seguridad está fuera del alcance.
+
+---
+
+## 6. Conceptos de contenedores
+
+**Imagen y contenedor.** Una **imagen** es una plantilla de solo lectura que trae todo lo necesario para ejecutar un programa: sistema base, librerías y código. Un **contenedor** es una instancia de esa imagen en ejecución, aislada de los demás procesos del equipo. En el laboratorio, `mysql:8.4` es una imagen oficial que se descarga tal cual, y la imagen de la API se construye con `api/Dockerfile`. De cada una sale un contenedor: `laboratorio-mysql` y `laboratorio-api`. Un contenedor se puede borrar y recrear desde su imagen en segundos, y por eso se dice que es **efímero**.
+
+**Red de Compose y nombre de servicio.** Docker Compose crea una red privada (`laboratorio-network`, de tipo bridge) y conecta a ella los dos contenedores. Dentro de esa red, cada contenedor encuentra a los demás **por el nombre del servicio**, gracias a un DNS interno de Docker. Por eso la API se conecta a `mysql:3306` y no a una IP ni a `localhost`: dentro del contenedor de la API, `localhost` es el propio contenedor. El puerto `3313` solo sirve para entrar a MySQL desde Windows, no para la comunicación entre contenedores (PI-2).
+
+**Volumen nombrado.** Es un espacio de almacenamiento que Docker administra **fuera** del contenedor. En el laboratorio, el volumen `mysql-data` se monta en `/var/lib/mysql`, que es donde MySQL guarda sus archivos. Así, cuando `docker compose down` destruye el contenedor de MySQL, los datos quedan en el volumen y el nuevo contenedor los vuelve a usar. Solo `docker compose down -v` borra el volumen (PI-4).
+
+**Variables de entorno.** Son valores de configuración que se entregan al contenedor desde fuera, sin cambiar el código ni la imagen. Compose lee el archivo `.env`, reemplaza los `${...}` del `docker-compose.yml` y pasa el resultado a cada contenedor. MySQL usa `MYSQL_USER` y `MYSQL_PASSWORD` para crear el usuario, y la API usa `DB_USER` y `DB_PASSWORD` para conectarse con ese mismo usuario. Si no coinciden, la API no puede entrar a la base de datos, aunque los dos contenedores estén en ejecución (PI-3). Una variable definida en la terminal tiene prioridad sobre la del `.env`, y eso es lo que usa CP-07.
+
+**Healthcheck.** Es un comando que Docker ejecuta periódicamente dentro de un contenedor para saber si el servicio está **listo**, no solo **en ejecución**. Sin él, Compose da por arrancado a MySQL apenas inicia el contenedor, aunque MySQL todavía no acepte conexiones. Con un healthcheck y `depends_on: condition: service_healthy`, Compose espera a que MySQL responda antes de arrancar la API. ⏳ *El compose actual no tiene healthcheck; lo agrega R1 con el ajuste A2.*
 
 ---
 
@@ -192,14 +179,14 @@ flowchart LR
 
 | Decisión | Motivo |
 |---|---|
-| Dos contenedores (API + BD) | La guía pide un laboratorio pequeño, de 2 a 3 componentes; es el mínimo que permite probar integración real |
-| `node:22-alpine` | Imagen liviana, con una versión LTS de Node.js |
-| `mysql:8.4` | Imagen oficial y versión LTS de MySQL; permite scripts de inicialización |
-| Puerto externo `3313` para MySQL | Evita el conflicto con un MySQL local que ya use el `3306` |
-| Usuario de aplicación distinto de `root` | La API usa `laboratorio_user`; `root` solo para administración |
-| Volumen con nombre (`mysql-data`) | Persistencia independiente del ciclo de vida del contenedor |
-| Respuesta `503` ante fallas de BD | La API no se cae: informa que la dependencia no está disponible |
-| Configuración en `.env` | Separar la configuración del código; el mismo código sirve en otros ambientes |
+| Dos contenedores: API y base de datos | La guía pide un laboratorio pequeño, de 2 a 3 componentes; es el mínimo que permite probar una integración real |
+| `node:22-alpine` y `mysql:8.4` con versión fija | Imágenes oficiales y livianas; con la versión fija, todos los integrantes ejecutan exactamente lo mismo |
+| `container_name` fijo | Permite ejecutar `docker stop laboratorio-mysql` en las pruebas de caída desde cualquier carpeta |
+| Puerto externo `3313` para MySQL | Evita el conflicto con un MySQL instalado en el equipo que ya use el `3306` |
+| Usuario de aplicación distinto de `root` | La API usa `laboratorio_user`; `root` queda solo para administración |
+| Volumen nombrado `mysql-data` | Los datos no dependen del ciclo de vida del contenedor |
+| La API responde `503` cuando MySQL falla | La API no se cae: informa que su dependencia no está disponible |
+| Configuración en `.env` | La misma imagen sirve con otra configuración sin cambiar el código |
 
 ### Alcance y limitaciones
 
@@ -212,10 +199,9 @@ flowchart LR
 
 ## 8. Resumen
 
-1. **Componentes:** API (Node.js) y base de datos (MySQL), cada una en su contenedor.
-2. **Pegamento:** Docker Compose, que crea la red, el volumen y entrega la configuración.
-3. **Seis puntos de integración**; el más crítico es **API → MySQL (PI-2)**.
-4. **Diez riesgos**, seis de ellos ya observados en el laboratorio.
-5. **Qué se debe demostrar en las pruebas:** comunicación (PI-1, PI-2), configuración (PI-3), persistencia (PI-4) y recuperación ante caídas (R-02, R-04).
+1. **Dos componentes aislados:** la API (Node.js) y la base de datos (MySQL), cada uno en su contenedor.
+2. **Docker Compose como pegamento:** crea la red y el volumen y entrega la configuración.
+3. **Cuatro puntos de integración:** PI-1 (anfitrión → API), PI-2 (API → MySQL), PI-3 (`.env` → contenedores) y PI-4 (MySQL → volumen).
+4. **Un riesgo por punto**, cubierto por los 7 casos de prueba. El más crítico es PI-2.
 
-Las referencias están en [`referencias.md`](referencias.md).
+Las fuentes consultadas están en [`referencias.md`](referencias.md).
